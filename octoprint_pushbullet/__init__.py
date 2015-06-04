@@ -32,7 +32,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	#~~ StartupPlugin
 
 	def on_after_startup(self):
-		self._connect_bullet(self._settings.get(["apikey"]))
+		self._connect_bullet(self._settings.get(["access_token"]))
 
 	#~~ SettingsPlugin
 
@@ -40,11 +40,11 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		super(PushbulletPlugin, self).on_settings_save(data)
 
 		import threading
-		threading.Thread(target=self._connect_bullet, args=(self._settings.get(["apikey"]),))
+		threading.Thread(target=self._connect_bullet, args=(self._settings.get(["access_token"]),))
 
 	def get_settings_defaults(self):
 		return dict(
-			apikey=None,
+			access_token=None,
 			printDone=dict(
 				title="Print job finished",
 				body="{file} finished printing in {elapsed_time}"
