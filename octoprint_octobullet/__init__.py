@@ -87,6 +87,26 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 			self._send_note(title, body)
 
+	##~~ Softwareupdate hook
+
+	def get_update_information(self):
+		return dict(
+			octobullet=dict(
+				displayName="Pushbullet Plugin",
+				displayVersion=self._plugin_version,
+
+				# version check: github repository
+				type="github_release",
+				user="OctoPrint",
+				repo="OctoPrint-Pushbullet",
+				current=self._plugin_version,
+
+				# update method: pip
+				pip="https://github.com/OctoPrint/OctoPrint-Pushbullet/archive/{target_version}.zip"
+			)
+		)
+
+	##~~ Internal utility methods
 
 	def _send_note(self, title, body):
 		if not self._bullet:
@@ -113,4 +133,12 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 				self._logger.exception("Could not remove temporary snapshot file: %s" % path)
 
 __plugin_name__ = "Pushbullet"
-__plugin_implementation__ = PushbulletPlugin()
+def __plugin_load__():
+	global __plugin_implementation__
+	__plugin_implementation__ = PushbulletPlugin()
+
+	global __plugin_hooks__
+	__plugin_hooks__ = {
+		"octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information
+	}
+
