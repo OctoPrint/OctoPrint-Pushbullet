@@ -6,4 +6,5 @@
 # works as expected. Requirements can be found in setup.py.
 ###
 
+-e https://github.com/foosel/pushbullet.py/archive/master.zip#egg=pushbullet.py
 .
