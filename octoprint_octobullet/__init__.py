@@ -101,8 +101,9 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 				repo="OctoPrint-Pushbullet",
 				current=self._plugin_version,
 
-				# update method: pip
-				pip="https://github.com/OctoPrint/OctoPrint-Pushbullet/archive/{target_version}.zip"
+				# update method: pip w/ dependency links
+				pip="https://github.com/OctoPrint/OctoPrint-Pushbullet/archive/{target_version}.zip",
+				dependency_links=True
 			)
 		)
 
