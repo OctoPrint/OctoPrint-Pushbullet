@@ -79,7 +79,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 					import urllib
 					filename, headers = urllib.urlretrieve(snapshot_url)
 				except Exception as e:
-					self._logger.warn("Exception while fetching snapshot from webcam, sending only a note: {message}".format(message=str(e)))
+					self._logger.exception("Exception while fetching snapshot from webcam, sending only a note: {message}".format(message=str(e)))
 				else:
 					if self._send_file(filename, file, body):
 						return
@@ -125,7 +125,8 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 			success, push = self._bullet.push_file(file_data["file_name"], file_data["file_url"], file_data["file_type"], body=body)
 			return success
-		except:
+		except Exception as e:
+			self._logger.exception("Exception while uploading snapshot to Pushbullet, sending only a note: {message}".format(message=str(e)))
 			return False
 		finally:
 			try:
