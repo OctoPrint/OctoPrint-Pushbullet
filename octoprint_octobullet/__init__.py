@@ -112,19 +112,24 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	def _send_note(self, title, body):
 		if not self._bullet:
 			return
-		success, push = self._bullet.push_note(title, body)
-		return success
+		try:
+			self._bullet.push_note(title, body)
+		except:
+			self._logger.exception("Error while pushing a note")
+			return False
+		return True
 
 	def _send_file(self, path, file, body):
 		try:
 			with open(path, "rb") as pic:
-				success, file_data = self._bullet.upload_file(pic, os.path.splitext(file)[0] + ".jpg")
+				try:
+					file_data = self._bullet.upload_file(pic, os.path.splitext(file)[0] + ".jpg")
+				except Exception as e:
+					self._logger.exception("Error while uploading snapshot, sending only a note: {}".format(str(e)))
+					return False
 
-			if not success:
-				return False
-
-			success, push = self._bullet.push_file(file_data["file_name"], file_data["file_url"], file_data["file_type"], body=body)
-			return success
+			self._bullet.push_file(file_data["file_name"], file_data["file_url"], file_data["file_type"], body=body)
+			return True
 		except Exception as e:
 			self._logger.exception("Exception while uploading snapshot to Pushbullet, sending only a note: {message}".format(message=str(e)))
 			return False
