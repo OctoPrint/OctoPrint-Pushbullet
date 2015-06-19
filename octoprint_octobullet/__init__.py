@@ -37,7 +37,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	#~~ SettingsPlugin
 
 	def on_settings_save(self, data):
-		super(PushbulletPlugin, self).on_settings_save(data)
+		octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
 
 		import threading
 		threading.Thread(target=self._connect_bullet, args=(self._settings.get(["access_token"]),))
