@@ -1,3 +1,5 @@
+**STILL IN DEVELOPMENT, NOT FIT FOR GENERAL CONSUMPTION, DO NOT USE IF NOT A DEVELOPER!**
+
 # OctoPrint Pushbullet Plugin
 
 This is an OctoPrint Plugin that adds support for [Pushbullet notifications](https://www.pushbullet.com/) to OctoPrint.
