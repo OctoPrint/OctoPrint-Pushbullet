@@ -37,7 +37,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	#~~ SettingsPlugin
 
 	def on_settings_save(self, data):
-		super(PushbulletPlugin, self).on_settings_save(data)
+		octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
 
 		import threading
 		threading.Thread(target=self._connect_bullet, args=(self._settings.get(["access_token"]),))
@@ -79,7 +79,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 					import urllib
 					filename, headers = urllib.urlretrieve(snapshot_url)
 				except Exception as e:
-					self._logger.warn("Exception while fetching snapshot from webcam, sending only a note: {message}".format(message=str(e)))
+					self._logger.exception("Exception while fetching snapshot from webcam, sending only a note: {message}".format(message=str(e)))
 				else:
 					if self._send_file(filename, file, body):
 						return
@@ -101,8 +101,9 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 				repo="OctoPrint-Pushbullet",
 				current=self._plugin_version,
 
-				# update method: pip
-				pip="https://github.com/OctoPrint/OctoPrint-Pushbullet/archive/{target_version}.zip"
+				# update method: pip w/ dependency links
+				pip="https://github.com/OctoPrint/OctoPrint-Pushbullet/archive/{target_version}.zip",
+				dependency_links=True
 			)
 		)
 
@@ -111,20 +112,26 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	def _send_note(self, title, body):
 		if not self._bullet:
 			return
-		success, push = self._bullet.push_note(title, body)
-		return success
+		try:
+			self._bullet.push_note(title, body)
+		except:
+			self._logger.exception("Error while pushing a note")
+			return False
+		return True
 
 	def _send_file(self, path, file, body):
 		try:
 			with open(path, "rb") as pic:
-				success, file_data = self._bullet.upload_file(pic, os.path.splitext(file)[0] + ".jpg")
+				try:
+					file_data = self._bullet.upload_file(pic, os.path.splitext(file)[0] + ".jpg")
+				except Exception as e:
+					self._logger.exception("Error while uploading snapshot, sending only a note: {}".format(str(e)))
+					return False
 
-			if not success:
-				return False
-
-			success, push = self._bullet.push_file(file_data["file_name"], file_data["file_url"], file_data["file_type"], body=body)
-			return success
-		except:
+			self._bullet.push_file(file_data["file_name"], file_data["file_url"], file_data["file_type"], body=body)
+			return True
+		except Exception as e:
+			self._logger.exception("Exception while uploading snapshot to Pushbullet, sending only a note: {message}".format(message=str(e)))
 			return False
 		finally:
 			try:
