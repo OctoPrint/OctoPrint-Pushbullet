@@ -13,10 +13,10 @@ parameters = octoprint_setuptools.create_plugin_setup_parameters(
 	requires=[
 		"OctoPrint",
 		"requests",
-		"pushbullet.py==dev"
+		"pushbullet.py.fixed==dev"
 	]
 )
 parameters["dependency_links"] = [
-	"https://github.com/foosel/pushbullet.py/archive/master.zip#egg=pushbullet.py-dev"
+	"https://github.com/foosel/pushbullet.py/archive/master.zip#egg=pushbullet.py.fixed-dev"
 ]
 setuptools.setup(**parameters)
