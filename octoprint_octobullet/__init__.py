@@ -24,6 +24,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		if apikey:
 			try:
 				self._bullet = pushbullet.PushBullet(apikey)
+				self._logger.info("Connected to PushBullet")
 				return True
 			except:
 				self._logger.exception("Error while instantiating PushBullet")
@@ -40,7 +41,9 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
 
 		import threading
-		threading.Thread(target=self._connect_bullet, args=(self._settings.get(["access_token"]),))
+		thread = threading.Thread(target=self._connect_bullet, args=(self._settings.get(["access_token"]),))
+		thread.daemon = True
+		thread.start()
 
 	def get_settings_defaults(self):
 		return dict(
