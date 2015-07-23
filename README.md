@@ -1,4 +1,4 @@
-**STILL IN DEVELOPMENT, NOT FIT FOR GENERAL CONSUMPTION, DO NOT USE IF NOT A DEVELOPER!**
+**HEADS-UP: Needs OctoPrint 1.2.4 or later!**
 
 # OctoPrint Pushbullet Plugin
 
