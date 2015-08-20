@@ -15,7 +15,8 @@ import pushbullet
 class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
                        octoprint.plugin.SettingsPlugin,
                        octoprint.plugin.StartupPlugin,
-                       octoprint.plugin.TemplatePlugin):
+                       octoprint.plugin.TemplatePlugin,
+                       octoprint.plugin.WizardPlugin):
 
 	def __init__(self):
 		self._bullet = None
@@ -58,7 +59,8 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 	def get_template_configs(self):
 		return [
-			dict(type="settings", name="Pushbullet", custom_bindings=False)
+			dict(type="settings", name="Pushbullet", custom_bindings=False),
+			dict(type="wizard", name="Pushbullet", custom_bindings=False)
 		]
 
 	#~~ EventHandlerPlugin
@@ -89,6 +91,11 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 					self._logger.warn("Could not send a file message with the webcam image, sending only a note")
 
 			self._send_note(title, body)
+
+	##~~ WizardPlugin
+
+	def is_wizard_required(self):
+		return self._settings.get(["access_token"]) is None
 
 	##~~ Softwareupdate hook
 
