@@ -14,7 +14,7 @@ of the print result will be captured and included in the notification.
 ## Installation
 
 Install via the bundled [Plugin Manager](https://github.com/foosel/OctoPrint/wiki/Plugin:-Plugin-Manager) 
-or manually using this URL and the ``--process-dependency-links`` option:
+or manually using this URL:
 
     https://github.com/OctoPrint/OctoPrint-Pushbullet/archive/master.zip
 
