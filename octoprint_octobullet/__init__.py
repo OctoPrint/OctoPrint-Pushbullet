@@ -19,11 +19,22 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 	def __init__(self):
 		self._bullet = None
+		self._channel = None
 
-	def _connect_bullet(self, apikey):
+	def _connect_bullet(self, apikey, channel_name=""):
 		if apikey:
 			try:
 				self._bullet = pushbullet.PushBullet(apikey)
+
+				#Setup _bullet to channel object if channel setting is present
+				self._channel = None
+				if channel_name:
+					for channel_obj in self._bullet.channels:
+						if channel_obj.channel_tag == channel_name:
+							self._channel = channel_obj
+							self._logger.info("Connected to Channel "+channel_name)
+							break
+							
 				self._logger.info("Connected to PushBullet")
 				return True
 			except:
@@ -33,7 +44,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	#~~ StartupPlugin
 
 	def on_after_startup(self):
-		self._connect_bullet(self._settings.get(["access_token"]))
+		self._connect_bullet(self._settings.get(["access_token"]),self._settings.get(["push_channel"]))
 
 	#~~ SettingsPlugin
 
@@ -41,13 +52,14 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
 
 		import threading
-		thread = threading.Thread(target=self._connect_bullet, args=(self._settings.get(["access_token"]),))
+		thread = threading.Thread(target=self._connect_bullet, args=(self._settings.get(["access_token"]),self._settings.get(["push_channel"])))
 		thread.daemon = True
 		thread.start()
 
 	def get_settings_defaults(self):
 		return dict(
 			access_token=None,
+			push_channel=None,
 			printDone=dict(
 				title="Print job finished",
 				body="{file} finished printing in {elapsed_time}"
@@ -115,7 +127,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		if not self._bullet:
 			return
 		try:
-			self._bullet.push_note(title, body)
+			(self._channel if self._channel else self._bullet).push_note(title, body)
 		except:
 			self._logger.exception("Error while pushing a note")
 			return False
@@ -130,7 +142,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 					self._logger.exception("Error while uploading snapshot, sending only a note: {}".format(str(e)))
 					return False
 
-			self._bullet.push_file(file_data["file_name"], file_data["file_url"], file_data["file_type"], body=body)
+			(self._channel if self._channel else self._bullet).push_file(file_data["file_name"], file_data["file_url"], file_data["file_type"], body=body)
 			return True
 		except Exception as e:
 			self._logger.exception("Exception while uploading snapshot to Pushbullet, sending only a note: {message}".format(message=str(e)))
