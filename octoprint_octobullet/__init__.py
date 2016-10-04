@@ -32,11 +32,14 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 					for channel_obj in self._bullet.channels:
 						if channel_obj.channel_tag == channel_name:
 							self._channel = channel_obj
-							self._logger.info("Connected to channel {}".format(channel_name))
-							break
-							
-				self._logger.info("Connected to PushBullet")
-				return True
+							self._logger.info("Connected to PushBullet on channel {}".format(channel_name))
+							return True
+					else:
+						self._logger.warn("Could not find channel {}, not connected, please check your configuration!".format(channel_name))
+						return False
+				else:
+					self._logger.info("Connected to PushBullet")
+					return True
 			except:
 				self._logger.exception("Error while instantiating PushBullet")
 				return False
