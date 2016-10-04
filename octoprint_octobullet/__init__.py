@@ -26,13 +26,13 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			try:
 				self._bullet = pushbullet.PushBullet(apikey)
 
-				#Setup _bullet to channel object if channel setting is present
+				# Setup channel object if channel setting is present
 				self._channel = None
 				if channel_name:
 					for channel_obj in self._bullet.channels:
 						if channel_obj.channel_tag == channel_name:
 							self._channel = channel_obj
-							self._logger.info("Connected to Channel "+channel_name)
+							self._logger.info("Connected to channel {}".format(channel_name))
 							break
 							
 				self._logger.info("Connected to PushBullet")
@@ -44,7 +44,8 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	#~~ StartupPlugin
 
 	def on_after_startup(self):
-		self._connect_bullet(self._settings.get(["access_token"]),self._settings.get(["push_channel"]))
+		self._connect_bullet(self._settings.get(["access_token"]),
+		                     self._settings.get(["push_channel"]))
 
 	#~~ SettingsPlugin
 
@@ -63,7 +64,8 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
 
 		import threading
-		thread = threading.Thread(target=self._connect_bullet, args=(self._settings.get(["access_token"]),self._settings.get(["push_channel"])))
+		thread = threading.Thread(target=self._connect_bullet, args=(self._settings.get(["access_token"]),
+		                                                             self._settings.get(["push_channel"])))
 		thread.daemon = True
 		thread.start()
 
@@ -142,7 +144,8 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		if not self._bullet:
 			return
 		try:
-			(self._channel if self._channel else self._bullet).push_note(title, body)
+			sender = self._channel if self._channel else self._bullet
+			sender.push_note(title, body)
 		except:
 			self._logger.exception("Error while pushing a note")
 			return False
@@ -157,7 +160,8 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 					self._logger.exception("Error while uploading snapshot, sending only a note: {}".format(str(e)))
 					return False
 
-			(self._channel if self._channel else self._bullet).push_file(file_data["file_name"], file_data["file_url"], file_data["file_type"], body=body)
+			sender = self._channel if self._channel else self._bullet
+			sender.push_file(file_data["file_name"], file_data["file_url"], file_data["file_type"], body=body)
 			return True
 		except Exception as e:
 			self._logger.exception("Exception while uploading snapshot to Pushbullet, sending only a note: {message}".format(message=str(e)))
