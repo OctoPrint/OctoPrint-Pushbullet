@@ -8,7 +8,9 @@ __copyright__ = "Copyright (C) 2015 The OctoPrint Project - Released under terms
 import os
 
 import octoprint.plugin
+
 from octoprint.events import Events
+from octoprint.server import admin_permission
 from flask.ext.login import current_user
 
 import pushbullet
@@ -89,6 +91,9 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		return dict(test=["token"])
 
 	def on_api_command(self, command, data):
+		if not admin_permission.can():
+			return flask.make_response("Insufficient rights", 403)
+
 		if not command == "test":
 			return
 
