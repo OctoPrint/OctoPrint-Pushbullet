@@ -9,40 +9,25 @@ import os
 
 import octoprint.plugin
 from octoprint.events import Events
+from flask.ext.login import current_user
 
 import pushbullet
+import flask
 
 class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
                        octoprint.plugin.SettingsPlugin,
                        octoprint.plugin.StartupPlugin,
-                       octoprint.plugin.TemplatePlugin):
+                       octoprint.plugin.TemplatePlugin,
+                       octoprint.plugin.SimpleApiPlugin,
+                       octoprint.plugin.AssetPlugin):
 
 	def __init__(self):
 		self._bullet = None
 		self._channel = None
+		self._sender = None
 
 	def _connect_bullet(self, apikey, channel_name=""):
-		if apikey:
-			try:
-				self._bullet = pushbullet.PushBullet(apikey)
-
-				# Setup channel object if channel setting is present
-				self._channel = None
-				if channel_name:
-					for channel_obj in self._bullet.channels:
-						if channel_obj.channel_tag == channel_name:
-							self._channel = channel_obj
-							self._logger.info("Connected to PushBullet on channel {}".format(channel_name))
-							return True
-					else:
-						self._logger.warn("Could not find channel {}, not connected, please check your configuration!".format(channel_name))
-						return False
-				else:
-					self._logger.info("Connected to PushBullet")
-					return True
-			except:
-				self._logger.exception("Error while instantiating PushBullet")
-				return False
+		self._bullet, self._sender = self._create_sender(apikey, channel_name)
 
 	#~~ StartupPlugin
 
@@ -55,11 +40,11 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	def on_settings_load(self):
 		data = octoprint.plugin.SettingsPlugin.on_settings_load(self)
 
-		if "access_token" in data:
-			# only return our settings to admin users - this is only needed for OctoPrint <= 1.2.16
-			from flask.ext.login import current_user
-			if current_user is not None and not current_user.is_anonymous() and not current_user.is_admin():
-				data["access_token"] = None
+		# only return our restricted settings to admin users - this is only needed for OctoPrint <= 1.2.16
+		restricted = ("access_token", "push_channel")
+		for r in restricted:
+			if r in data and (current_user is None or current_user.is_anonymous() or not current_user.is_admin()):
+				data[r] = None
 
 		return data
 
@@ -84,14 +69,37 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 	def get_settings_restricted_paths(self):
 		# only used in OctoPrint versions > 1.2.16
-		return dict(admin=[["access_token"],])
+		return dict(admin=[["access_token"], ["push_channel"]])
 
 	#~~ TemplatePlugin API
 
 	def get_template_configs(self):
 		return [
-			dict(type="settings", name="Pushbullet", custom_bindings=False)
+			dict(type="settings", name="Pushbullet", custom_bindings=True)
 		]
+
+	#~~ AssetPlugin API
+
+	def get_assets(self):
+		return dict(js=["js/octobullet.js"])
+
+	#~~ SimpleApiPlugin
+
+	def get_api_commands(self):
+		return dict(test=["token"])
+
+	def on_api_command(self, command, data):
+		if not command == "test":
+			return
+
+		message = data.get("message", "Testing, 1, 2, 3, 4...")
+		token = data["token"]
+		channel = data.get("channel", None)
+
+		_, sender = self._create_sender(token, channel)
+
+		result = self._send_message_with_webcam_image("Test from the OctoPrint PushBullet Plugin", message, sender=sender)
+		return flask.make_response(flask.jsonify(result=result))
 
 	#~~ EventHandlerPlugin
 
@@ -107,20 +115,9 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 			title = self._settings.get(["printDone", "title"]).format(**locals())
 			body = self._settings.get(["printDone", "body"]).format(**locals())
+			filename = os.path.splitext(file)[0] + ".jpg"
 
-			snapshot_url = self._settings.globalGet(["webcam", "snapshot"])
-			if snapshot_url:
-				try:
-					import urllib
-					filename, headers = urllib.urlretrieve(snapshot_url)
-				except Exception as e:
-					self._logger.exception("Exception while fetching snapshot from webcam, sending only a note: {message}".format(message=str(e)))
-				else:
-					if self._send_file(filename, file, body):
-						return
-					self._logger.warn("Could not send a file message with the webcam image, sending only a note")
-
-			self._send_note(title, body)
+			self._send_message_with_webcam_image(title, body, filename=filename)
 
 	##~~ Softwareupdate hook
 
@@ -143,27 +140,50 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 	##~~ Internal utility methods
 
-	def _send_note(self, title, body):
-		if not self._bullet:
-			return
+	def _send_message_with_webcam_image(self, title, body, filename=None, sender=None):
+		if filename is None:
+			import random, string
+			filename = "{}.jpg".format(random.choice(string.ascii_letters) * 16)
+
+		if sender is None:
+			sender = self._sender
+
+		if not sender:
+			return False
+
+		snapshot_url = self._settings.globalGet(["webcam", "snapshot"])
+		if snapshot_url:
+			try:
+				import urllib
+				snapshot_path, headers = urllib.urlretrieve(snapshot_url)
+			except Exception as e:
+				self._logger.exception(
+					"Exception while fetching snapshot from webcam, sending only a note: {message}".format(
+						message=str(e)))
+			else:
+				if self._send_file(sender, snapshot_path, filename, body):
+					return True
+				self._logger.warn("Could not send a file message with the webcam image, sending only a note")
+
+		return self._send_note(sender, title, body)
+
+	def _send_note(self, sender, title, body):
 		try:
-			sender = self._channel if self._channel else self._bullet
 			sender.push_note(title, body)
 		except:
 			self._logger.exception("Error while pushing a note")
 			return False
 		return True
 
-	def _send_file(self, path, file, body):
+	def _send_file(self, sender, path, filename, body):
 		try:
 			with open(path, "rb") as pic:
 				try:
-					file_data = self._bullet.upload_file(pic, os.path.splitext(file)[0] + ".jpg")
+					file_data = self._bullet.upload_file(pic, filename)
 				except Exception as e:
 					self._logger.exception("Error while uploading snapshot, sending only a note: {}".format(str(e)))
 					return False
 
-			sender = self._channel if self._channel else self._bullet
 			sender.push_file(file_data["file_name"], file_data["file_url"], file_data["file_type"], body=body)
 			return True
 		except Exception as e:
@@ -173,7 +193,29 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			try:
 				os.remove(path)
 			except:
-				self._logger.exception("Could not remove temporary snapshot file: %s" % path)
+				self._logger.exception("Could not remove temporary snapshot file {}".format(path))
+
+	def _create_sender(self, token, channel=None):
+		try:
+			bullet = pushbullet.PushBullet(token)
+			sender = self._bullet
+
+			# Setup channel object if channel setting is present
+			if channel:
+				for channel_obj in self._bullet.channels:
+					if channel_obj.channel_tag == channel:
+						self._sender = channel_obj
+						self._logger.info("Connected to PushBullet on channel {}".format(channel))
+						break
+				else:
+					self._logger.warn("Could not find channel {}, please check your configuration!".format(channel))
+
+			self._logger.info("Connected to PushBullet")
+			return bullet, sender
+		except:
+			self._logger.exception("Error while instantiating PushBullet")
+			return None, None
+
 
 __plugin_name__ = "Pushbullet"
 def __plugin_load__():

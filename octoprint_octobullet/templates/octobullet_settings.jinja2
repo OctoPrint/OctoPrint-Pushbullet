@@ -1,20 +1,31 @@
 <h3>{{ _('Pushbullet Configuration') }}</h3>
 
-{% trans %}<p>
-    In order to use the Pushbullet plugin, you need to configure your Pushbullet
-    Access Token below. You can find that in
-    <a href="https://www.pushbullet.com/#settings" target="_blank">your Pushbullet account settings</a>.
-</p>{% endtrans %}
-
 <form class="form-horizontal">
+
+    {% trans %}<p>
+        In order to use the Pushbullet plugin, you need to configure your Pushbullet
+        Access Token below. You can find that in
+        <a href="https://www.pushbullet.com/#settings" target="_blank">your Pushbullet account settings</a>.
+    </p>{% endtrans %}
+
     <div class="control-group">
         <label class="control-label">{{ _('Access Token') }}</label>
         <div class="controls">
-            <input type="text" class="input-block-level" data-bind="value: settings.plugins.octobullet.access_token">
+            <input type="text" class="input-block-level" data-bind="value: settings.settings.plugins.octobullet.access_token">
         </div>
+    </div>
+
+    {% trans %}<p>
+        You can also define the tag of a channel here to push the messages to instead of your general Pushbullet
+        account. You can read more about Pushbullet's channels <a href="https://www.pushbullet.com/channels" target="_blank">on Pushbullet</a>.
+    </p>{% endtrans %}
+
+    <div class="control-group">
         <label class="control-label">{{ _('Channel') }}</label>
         <div class="controls">
-            <input type="text" class="input-block-level" data-bind="value: settings.plugins.octobullet.push_channel">
+            <input type="text" class="input-block-level" data-bind="value: settings.settings.plugins.octobullet.push_channel">
         </div>
     </div>
 </form>
+
+<button class="btn btn-primary btn-block" data-bind="click: sendTestMessage"><i class="icon-spinner icon-spin" data-bind="visible: busy"></i> {{ _('Send a test message') }}</button>
