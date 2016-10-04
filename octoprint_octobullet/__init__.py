@@ -37,6 +37,17 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 	#~~ SettingsPlugin
 
+	def on_settings_load(self):
+		data = octoprint.plugin.SettingsPlugin.on_settings_load(self)
+
+		if "access_token" in data:
+			# only return our settings to admin users - this is only needed for OctoPrint <= 1.2.16
+			from flask.ext.login import current_user
+			if current_user is not None and not current_user.is_anonymous() and not current_user.is_admin():
+				data["access_token"] = None
+
+		return data
+
 	def on_settings_save(self, data):
 		octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
 
@@ -53,6 +64,9 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 				body="{file} finished printing in {elapsed_time}"
 			)
 		)
+
+	def get_settings_restricted_paths(self):
+		return dict(admin=[["access_token"],])
 
 	#~~ TemplatePlugin API
 
