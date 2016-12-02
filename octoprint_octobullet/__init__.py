@@ -156,7 +156,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		if not sender:
 			return False
 
-		snapshot_url = self._settings.globalGet(["webcam", "snapshot"])
+		snapshot_url = self._settings.global_get(["webcam", "snapshot"])
 		if snapshot_url:
 			try:
 				import urllib
@@ -203,13 +203,13 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	def _create_sender(self, token, channel=None):
 		try:
 			bullet = pushbullet.PushBullet(token)
-			sender = self._bullet
+			sender = bullet
 
 			# Setup channel object if channel setting is present
 			if channel:
 				for channel_obj in self._bullet.channels:
 					if channel_obj.channel_tag == channel:
-						self._sender = channel_obj
+						sender = channel_obj
 						self._logger.info("Connected to PushBullet on channel {}".format(channel))
 						break
 				else:
