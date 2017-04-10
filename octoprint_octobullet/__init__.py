@@ -158,6 +158,25 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 		snapshot_url = self._settings.global_get(["webcam", "snapshot"])
 		if snapshot_url:
+			# stolen from https://github.com/fabianonline/OctoPrint-Telegram/
+			flipH = self._settings.global_get(["webcam", "flipH"])
+			flipV = self._settings.global_get(["webcam", "flipV"])
+			rotate= self._settings.global_get(["webcam", "rotate90"])
+			
+			# 	if flipH or flipV or rotate:
+			# 				image = Image.open(StringIO.StringIO(data))
+			# 			if flipH:
+			# 				image = image.transpose(Image.FLIP_LEFT_RIGHT)
+			# 			if flipV:
+			# 				image = image.transpose(Image.FLIP_TOP_BOTTOM)
+			# 			if rotate:
+			# 				image = image.transpose(Image.ROTATE_90)
+			# 			output = StringIO.StringIO()
+			# 			image.save(output, format="JPEG")
+			# 			data = output.getvalue()
+			# 			output.close()
+			# return data
+
 			try:
 				import urllib
 				snapshot_path, headers = urllib.urlretrieve(snapshot_url)
