@@ -230,40 +230,36 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			self._logger.exception("Error while instantiating PushBullet")
 			return None, None
 
-	def _process_snapshot(self, snapshot_path):
+	def _process_snapshot(self, snapshot_path, pixfmt="yuv420p"):
 		hflip  = self._settings.global_get_boolean(["webcam", "flipH"])
 		vflip  = self._settings.global_get_boolean(["webcam", "flipV"])
 		rotate = self._settings.global_get_boolean(["webcam", "rotate90"])
 		ffmpeg = self._settings.global_get(["webcam", "ffmpeg"])
 		
-		if ffmpeg is None or not os.access(ffmpeg, os.X_OK) or (not vflip and not hflip and not rotate):
+		if not ffmpeg or not os.access(ffmpeg, os.X_OK) or (not vflip and not hflip and not rotate):
 			return
 
-		ffmpeg_command = ffmpeg + " -y -i " + snapshot_path + " -vf "
+		ffmpeg_command = [ffmpeg, "-y", "-i", snapshot_path]
 
-		rotate_params = []
+		rotate_params = ["format={}".format(pixfmt)] # workaround for foosel/OctoPrint#1317
 		if rotate:
 			rotate_params.append("transpose=2") # 90 degrees counter clockwise
 		if hflip:
 			rotate_params.append("hflip") 		# horizontal flip
 		if vflip:
 			rotate_params.append("vflip")		# vertical flip
-		
-		ffmpeg_command += "\"" + ",".join(rotate_params) + "\""
 
-		# overwrite original image with the processed one
-		ffmpeg_command += " " + snapshot_path
-		self._logger.info("Running: %s" % ffmpeg_command)
+		ffmpeg_command += ["-vf", sarge.shell_quote(",".join(rotate_params)), snapshot_path]
+		self._logger.info("Running: {}".format(" ".join(ffmpeg_command)))
 
 		p = sarge.run(ffmpeg_command, stdout=sarge.Capture(), stderr=sarge.Capture())
 		if p.returncode == 0:
-			stdout_text = p.stdout.text
-			self._logger.info("Rotated image with ffmpeg: %s" % stdout_text)
+			self._logger.info("Rotated/flipped image with ffmpeg")
 		else:
-			returncode = p.returncode
-			stderr_text = p.stderr.text
-
-			self._logger.warn("Failed to rotate image with ffmpeg, got return code %r: %s" % (returncode, stderr_text))
+			self._logger.warn("Failed to rotate/flip image with ffmpeg, "
+			                  "got return code {}: {}, {}".format(p.returncode,
+			                                                      p.stdout.text,
+			                                                      p.stderr.text))
 
 __plugin_name__ = "Pushbullet"
 def __plugin_load__():
