@@ -1,2 +1,4 @@
 include README.md
-recursive-include octoprint_octobullet *
+recursive-include octoprint_octobullet/templates *
+recursive-include octoprint_octobullet/translations *
+recursive-include octoprint_octobullet/static *
