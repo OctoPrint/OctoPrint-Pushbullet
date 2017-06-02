@@ -26,6 +26,17 @@
             <input type="text" class="input-block-level" data-bind="value: settings.settings.plugins.octobullet.push_channel">
         </div>
     </div>
+    {% trans %}<p>
+        You can define a time interval (in minutes) here for regular update messages as the print progresses. Set to 0 to prevent updates. First and last messages will usually not be sent. Be aware of the monthly message limit applied to free PushBullet accounts.
+    </p>{% endtrans %}
+
+    <div class="control-group">
+        <label class="control-label">{{ _('Quiet Time') }}</label>
+        <div class="controls">
+            <input type="text" class="input-block-level" data-bind="value: settings.settings.plugins.octobullet.quiet_minutes">
+        </div>
+    </div>
+
 </form>
 
 <button class="btn btn-primary btn-block" data-bind="click: sendTestMessage"><i class="icon-spinner icon-spin" data-bind="visible: busy"></i> {{ _('Send a test message') }}</button>
