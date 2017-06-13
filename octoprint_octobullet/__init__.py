@@ -33,11 +33,11 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		self._bullet = None
 		self._channel = None
 		self._sender = None
-		self._pc_interval = 5
+		self._interval_percent = 5
 		self._message_count = 0
 		self._quiet_time_sec = 1800
 		self._last_message = 0
-		self._etl_format   = "{days:d}:{hours:02d}h {minutes:02d}m"
+		self._time_remaining_format = "{days:d}d {hours:02d}h {minutes:02d}min"
 		self._eta_strftime = "%H:%M %d-%m"
 
 	def _connect_bullet(self, apikey, channel_name=""):
@@ -48,7 +48,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		if (currentData["progress"]["printTimeLeft"] == None):
 			currentData["progress"]["printTimeLeft"] = currentData["job"]["estimatedPrintTime"]
 		if (currentData["progress"]["printTimeLeft"] == None):
-			self._logger.info("Messasge: Still got no print time {}".format(currentData["progress"]["printTimeLeft"]))
+			self._logger.debug("Still got no print time {}".format(currentData["progress"]["printTimeLeft"]))
 			currentData["progress"]["printTimeLeft"] = 1000
 		if (currentData["progress"]["filepos"] == None):
 			currentData["progress"]["filepos"] = 0
@@ -69,65 +69,56 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		return currentData
 
 	def _get_time_from_seconds(self, seconds):
-		days =0
-		hours = 0
-		minutes = 0
-		if seconds >= 86400:
-			days = int(seconds / 86400)
-			secionds = seconds % 86400
-		if seconds >= 3600:
-			hours = int(seconds / 3600)
-			seconds = seconds % 3600
-		if seconds >= 60:
-			minutes = int(seconds / 60)
-			seconds = seconds % 60
-		return self._etl_format.format(**locals())
+		days, seconds = divmod(seconds, 86400)
+		hours, seconds = divmod(seconds, 3600)
+		minutes, seconds = divmod(seconds, 60)
+		return self._time_remaining_format.format(**locals())
 	
 	#~~ PrintProgressPlugin
 	def on_print_progress(self, storage, path, progress):
-		if(progress%self._pc_interval==0):
+		if(progress % self._interval_percent == 0):
 			self._quiet_time_sec = int(self._settings.get(["quiet_minutes"])) * 60
 			if self._quiet_time_sec == 0:
 				self._quiet_time_sec = 7* 24 * 3600 # use a week if we don't want messages
-			self._logger.info("Progress: {} {} {}".format(storage,path,progress))
+			self._logger.debug("Progress: {} {} {}".format(storage,path,progress))
 			try:
 				currentData = self._printer.get_current_data()
 				currentData = self._sanitize_current_data(currentData)
 			except Exception as e:
 				self._logger.info("Caught an exception {0}\nTraceback:{1}".format(e,traceback.format_exc()))
 
-			self._logger.info("Messasge: Remaining {} ({})".format(currentData["progress"]["printTimeLeftString"],currentData["progress"]["printTimeLeftOrigin"]))
-			self._logger.info("Messasge: Total Print time {}".format(currentData["progress"]["printTimeString"]))
-			self._logger.info("Messasge: Estimated Completion  {}".format(currentData["progress"]["ETA"]))
+			self._logger.debug("Remaining {} ({})".format(currentData["progress"]["printTimeLeftString"],currentData["progress"]["printTimeLeftOrigin"]))
+			self._logger.debug("Total Print time {}".format(currentData["progress"]["printTimeString"]))
+			self._logger.debug("Estimated Completion  {}".format(currentData["progress"]["ETA"]))
 			# first 3 messages, re-calculate interval (not first, analysis estimate can be inacurate)
 			self._message_count += 1
 			if self._message_count < 4 and self._message_count > 1:
-				total_job = currentData["progress"]["printTime"]+currentData["progress"]["printTimeLeft"]
-				self._pc_interval = int(100 * self._quiet_time_sec / total_job)
-				if self._pc_interval == 0:
-					self._pc_interval = 1
-				self._logger.info("Messasge: Set interval to {} percent count {} Total estimated {}".format(self._pc_interval, self._message_count,total_job))
+				total_job = currentData["progress"]["printTime"] + currentData["progress"]["printTimeLeft"]
+				self._interval_percent = int(100 * self._quiet_time_sec / total_job)
+				if self._interval_percent == 0:
+					self._interval_percent = 1
+				self._logger.debug("Set interval to {} percent count {} Total estimated {}".format(self._interval_percent, self._message_count,total_job))
 				
 			# Suppress message if print is nearly done or interval calculation is off
-			no_message = 0
+			need_message = True
 			if(currentData["progress"]["printTime"] < (self._quiet_time_sec * 0.5  + self._last_message)):
-				self._logger.info("Messasge: Skip message {} since print is only been running {} since last at {}".format(self._message_count, currentData["progress"]["printTime"], self._last_message))
-				no_message = 1
+				self._logger.debug("Skip message {} since print is only been running {} since last at {}".format(self._message_count, currentData["progress"]["printTime"], self._last_message))
+				need_message = False
 					 
 			if(currentData["progress"]["printTimeLeft"] < self._quiet_time_sec):
-				self._logger.info("Messasge: Skip trailing message since print is nearly done {} of {}".format(currentData["progress"]["printTimeLeft"], self._quiet_time_sec))
-				no_message = 1
-			   
-			if no_message == 0:
+				self._logger.debug("Skip trailing message since print is nearly done {} of {}".format(currentData["progress"]["printTimeLeft"], self._quiet_time_sec))
+				need_message = False
+
+			if need_message:
 				self._last_message = currentData["progress"]["printTime"]
-				file = currentData["job"]["file"]["path"]
-				ETA = currentData["progress"]["ETA"]
+				path = currentData["job"]["file"]["path"]
+				eta = currentData["progress"]["ETA"]
 				print_time = currentData["progress"]["printTimeString"]
 				remaining = currentData["progress"]["printTimeLeftString"]
 			
-				title = self._settings.get(["printPartial", "title"]).format(**locals())
-				body = self._settings.get(["printPartial", "body"]).format(**locals())
-				filename = os.path.splitext(file)[0] + ".jpg"
+				title = self._settings.get(["printProgress", "title"]).format(**locals())
+				body = self._settings.get(["printProgress", "body"]).format(**locals())
+				filename = os.path.splitext(path)[0] + ".jpg"
 
 				self._send_message_with_webcam_image(title, body, filename=filename)
 			
@@ -145,7 +136,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		data = octoprint.plugin.SettingsPlugin.on_settings_load(self)
 
 		# only return our restricted settings to admin users - this is only needed for OctoPrint <= 1.2.16
-		restricted = ("quiet_minutes", "access_token", "push_channel")
+		restricted = ("access_token", "push_channel")
 		for r in restricted:
 			if r in data and (current_user is None or current_user.is_anonymous() or not current_user.is_admin()):
 				data[r] = None
@@ -156,30 +147,29 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
 
 		import threading
-		thread = threading.Thread(target=self._connect_bullet, args=(self._settings.get(["quiet_minutes"]),
-									     self._settings.get(["access_token"]),
+		thread = threading.Thread(target=self._connect_bullet, args=(self._settings.get(["access_token"]),
 		                                                             self._settings.get(["push_channel"])))
 		thread.daemon = True
 		thread.start()
 
 	def get_settings_defaults(self):
 		return dict(
-			quiet_minute=0,
+			quiet_minutes = 0,
 			access_token=None,
 			push_channel=None,
 			printDone=dict(
 				title="Print job finished",
 				body="{file} finished printing in {elapsed_time}"
 			),
-			printPartial=dict(
+			printProgress=dict(
 				title="Print job {progress}% complete",
-				body="{progress}% {file}\n{print_time}\n{remaining} left\n{ETA} finish"
+				body="{progress}% {path}\n{print_time}\n{remaining} left\n{eta} finish"
 			)
 		)
 
 	def get_settings_restricted_paths(self):
 		# only used in OctoPrint versions > 1.2.16
-		return dict(admin=[["quiet_minutes"], ["access_token"], ["push_channel"]])
+		return dict(admin=[["access_token"], ["push_channel"]])
 
 	#~~ TemplatePlugin API
 
@@ -233,8 +223,8 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			self._send_message_with_webcam_image(title, body, filename=filename)
 
 		if event == Events.PRINT_STARTED:
-			self._pc_interval = 5
-			self.message_count = 0
+			self._interval_percent = 5
+			self._message_count = 0
 			self._last_message = 0
 
 
