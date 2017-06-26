@@ -8,7 +8,6 @@ __copyright__ = "Copyright (C) 2015 The OctoPrint Project - Released under terms
 import os
 
 import time
-import traceback
 import octoprint.util
 import octoprint.plugin
 
@@ -33,10 +32,9 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		self._bullet = None
 		self._channel = None
 		self._sender = None
-		self._interval_percent = 5
-		self._message_count = 0
-		self._quiet_time_sec = 1800
-		self._last_message = 0
+		self._update_period_sec = 0
+		self._periodic_updates_disabled = True
+		self._next_message = 0
 		self._time_remaining_format = "{days:d}d {hours:02d}h {minutes:02d}min"
 		self._eta_strftime = "%H:%M %d-%m"
 
@@ -45,26 +43,16 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 	#~~ progress message helpers
 	def _sanitize_current_data(self, currentData):
-		if (currentData["progress"]["printTimeLeft"] == None):
-			currentData["progress"]["printTimeLeft"] = currentData["job"]["estimatedPrintTime"]
-		if (currentData["progress"]["printTimeLeft"] == None):
-			self._logger.debug("Still got no print time {}".format(currentData["progress"]["printTimeLeft"]))
-			currentData["progress"]["printTimeLeft"] = 1000
-		if (currentData["progress"]["filepos"] == None):
-			currentData["progress"]["filepos"] = 0
-		if (currentData["progress"]["printTime"] == None):
-			currentData["progress"]["printTime"] = currentData["job"]["estimatedPrintTime"]
 
-		currentData["progress"]["printTimeLeftString"] = "No ETL yet"
+		#Default messages if no data available
+		currentData["progress"]["printTimeLeftString"] = "No Time Remaining yet"
 		currentData["progress"]["printTimeString"] = "Not started yet"
 		currentData["progress"]["ETA"] = "No ETA yet"
-		#Add additional data
-		try:
+		if (currentData["progress"]["printTimeLeft"] != None):
 			currentData["progress"]["printTimeLeftString"] = self._get_time_from_seconds(currentData["progress"]["printTimeLeft"])
-			currentData["progress"]["printTimeString"] = self._get_time_from_seconds(currentData["progress"]["printTime"])
 			currentData["progress"]["ETA"] = time.strftime(self._eta_strftime, time.localtime(time.time() + currentData["progress"]["printTimeLeft"]))
-		except Exception as e:
-			self._logger.warning("Caught an exception trying to parse data: {0}\n Error is: {1}\nTraceback:{2}".format(currentData,e,traceback.format_exc()))
+		if (currentData["progress"]["printTime"] != None):
+			currentData["progress"]["printTimeString"] = self._get_time_from_seconds(currentData["progress"]["printTime"])
 			
 		return currentData
 
@@ -76,51 +64,39 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	
 	#~~ PrintProgressPlugin
 	def on_print_progress(self, storage, path, progress):
-		if(progress % self._interval_percent == 0):
-			self._quiet_time_sec = int(self._settings.get(["quiet_minutes"])) * 60
-			if self._quiet_time_sec == 0:
-				self._quiet_time_sec = 7* 24 * 3600 # use a week if we don't want messages
-			self._logger.debug("Progress: {} {} {}".format(storage,path,progress))
-			try:
-				currentData = self._printer.get_current_data()
-				currentData = self._sanitize_current_data(currentData)
-			except Exception as e:
-				self._logger.info("Caught an exception {0}\nTraceback:{1}".format(e,traceback.format_exc()))
+		if(self._periodic_updates_disabled):
+			return
 
-			self._logger.debug("Remaining {} ({})".format(currentData["progress"]["printTimeLeftString"],currentData["progress"]["printTimeLeftOrigin"]))
-			self._logger.debug("Total Print time {}".format(currentData["progress"]["printTimeString"]))
-			self._logger.debug("Estimated Completion  {}".format(currentData["progress"]["ETA"]))
-			# first 3 messages, re-calculate interval (not first, analysis estimate can be inacurate)
-			self._message_count += 1
-			if self._message_count < 4 and self._message_count > 1:
-				total_job = currentData["progress"]["printTime"] + currentData["progress"]["printTimeLeft"]
-				self._interval_percent = int(100 * self._quiet_time_sec / total_job)
-				if self._interval_percent == 0:
-					self._interval_percent = 1
-				self._logger.debug("Set interval to {} percent count {} Total estimated {}".format(self._interval_percent, self._message_count,total_job))
-				
-			# Suppress message if print is nearly done or interval calculation is off
-			need_message = True
-			if(currentData["progress"]["printTime"] < (self._quiet_time_sec * 0.5  + self._last_message)):
-				self._logger.debug("Skip message {} since print is only been running {} since last at {}".format(self._message_count, currentData["progress"]["printTime"], self._last_message))
-				need_message = False
-					 
-			if(currentData["progress"]["printTimeLeft"] < self._quiet_time_sec):
-				self._logger.debug("Skip trailing message since print is nearly done {} of {}".format(currentData["progress"]["printTimeLeft"], self._quiet_time_sec))
-				need_message = False
+		# Called every 1% of progress
+		self._logger.debug("Progress: {} {} {}".format(storage,path,progress))
+		
+		# Check if enough time has passed since last message
+		if(time.time() < self._next_message):
+			return
 
-			if need_message:
-				self._last_message = currentData["progress"]["printTime"]
-				path = currentData["job"]["file"]["path"]
-				eta = currentData["progress"]["ETA"]
-				print_time = currentData["progress"]["printTimeString"]
-				remaining = currentData["progress"]["printTimeLeftString"]
-			
-				title = self._settings.get(["printProgress", "title"]).format(**locals())
-				body = self._settings.get(["printProgress", "body"]).format(**locals())
-				filename = os.path.splitext(path)[0] + ".jpg"
+		currentData = self._printer.get_current_data()
+		currentData = self._sanitize_current_data(currentData)
 
-				self._send_message_with_webcam_image(title, body, filename=filename)
+		self._logger.debug("Remaining {} ({})".format(currentData["progress"]["printTimeLeftString"],currentData["progress"]["printTimeLeftOrigin"]))
+		self._logger.debug("Total Print time {}".format(currentData["progress"]["printTimeString"]))
+		self._logger.debug("Estimated Completion  {}".format(currentData["progress"]["ETA"]))
+
+		#Now we have print time left, check if there is time for another message before job ends
+		if(currentData["progress"]["printTimeLeft"] < self._update_period_sec):
+			self._logger.debug("Skip trailing message since print is nearly done {} of {}".format(currentData["progress"]["printTimeLeft"], self._update_period_sec))
+			return
+
+		self._next_message = time.time() + self._update_period_sec
+
+		path = currentData["job"]["file"]["path"]
+		eta = currentData["progress"]["ETA"]
+		print_time = currentData["progress"]["printTimeString"]
+		remaining = currentData["progress"]["printTimeLeftString"]
+		title = self._settings.get(["printProgress", "title"]).format(**locals())
+		body = self._settings.get(["printProgress", "body"]).format(**locals())
+		filename = os.path.splitext(path)[0] + ".jpg"
+
+		self._send_message_with_webcam_image(title, body, filename=filename)
 			
 													    
 	
@@ -151,10 +127,18 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		                                                             self._settings.get(["push_channel"])))
 		thread.daemon = True
 		thread.start()
+		# Periodic update settings
+		self._update_period_sec = self._settings.get_int(["update_interval"]) * 60
+		self._periodic_updates_disabled = self._settings.get(["periodic_updates_disabled"])
+		self._logger.debug("Config: {} {}".format(self._update_period_sec, self._periodic_updates_disabled))
+		# Changing settings mid-print resets the timer
+		self._next_message = time.time() + self._update_period_sec
+
 
 	def get_settings_defaults(self):
 		return dict(
-			quiet_minutes = 0,
+			update_interval = 0,
+			progress_updates_enabled = False,
 			access_token=None,
 			push_channel=None,
 			printDone=dict(
@@ -223,9 +207,10 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			self._send_message_with_webcam_image(title, body, filename=filename)
 
 		if event == Events.PRINT_STARTED:
-			self._interval_percent = 5
-			self._message_count = 0
-			self._last_message = 0
+			self._update_period_sec = self._settings.get_int(["update_interval"]) * 60
+			self._periodic_updates_disabled = self._settings.get(["periodic_updates_disabled"])
+			self._next_message = time.time() + self._update_period_sec
+			self._logger.debug("Started: {} {}".format(self._update_period_sec, self._periodic_updates_disabled))
 
 
 	##~~ Softwareupdate hook

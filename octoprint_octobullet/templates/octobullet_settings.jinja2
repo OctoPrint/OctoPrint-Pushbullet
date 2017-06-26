@@ -27,13 +27,24 @@
         </div>
     </div>
     {% trans %}<p>
-        You can define a time interval (in minutes) here for regular update messages as the print progresses. Set to 0 to prevent updates. First and last messages will usually not be sent. Be aware of the monthly message limit applied to free PushBullet accounts.
+        You can define a time interval (in minutes) here for regular update messages as the print progresses. The first message will come at this interval after printing has started. No messages are sent if the estimated time remaining is less than the interval. Be aware of the monthly message limit applied to free PushBullet accounts.
     </p>{% endtrans %}
 
     <div class="control-group">
-        <label class="control-label">{{ _('Quiet Time') }}</label>
+        <label class="control-label">{{ _('Update interval') }}</label>
         <div class="controls">
-            <input type="text" class="input-block-level" data-bind="value: settings.settings.plugins.octobullet.quiet_minutes">
+            <input type="text" class="input-block-level" data-bind="value: settings.settings.plugins.octobullet.update_interval">
+        </div>
+    </div>
+    {% trans %}<p>
+        Set this to disable periodic updates leaving just the end-of-print message.
+    </p>{% endtrans %}
+
+    <div class="control-group">
+        <label class="checkbox">
+            <div class="controls">
+                <input type="checkbox" class="input-block-level" data-bind="checked: settings.settings.plugins.octobullet.periodic_updates_disabled">{{ _('Updates Disabled') }}
+	    </label>
         </div>
     </div>
 
