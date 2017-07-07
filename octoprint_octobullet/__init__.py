@@ -19,9 +19,58 @@ import pushbullet
 import flask
 
 import sarge
+import collections
+import threading
+
+
+_TIME_REMAINING_FORMAT = "{hours:d}h {minutes:d}min"
+_TIME_DAYS_REMAINING_FORMAT = "{days:d}d {hours:d}h {minutes:d}min"
+_ETA_STRFTIME = "%Y-%m-%d %H:%M"
+_ETA_DAYS_STRFTIME = "%H:%M"
+_PERIODIC_FILENAME_FORMAT = "{name}-{progress}.jpg"
+
+_SECONDS_PER_DAY = 86400
+_SECONDS_PER_HOUR = 3600
+_SECONDS_PER_MINUTE = 60
+
+
+def _get_time_from_seconds(seconds):
+	"""
+	Tests:
+
+		>>> _get_time_from_seconds(0)
+		'0h 0min'
+		>>> _get_time_from_seconds(86400 + 3600 + 60)
+		'1d 1h 1min'
+		>>> _get_time_from_seconds(23 * 3600 + 59 * 60 + 59)
+		'23h 59min'
+	"""
+
+	days, seconds = divmod(seconds, _SECONDS_PER_DAY)
+	hours, seconds = divmod(seconds, _SECONDS_PER_HOUR)
+	minutes, seconds = divmod(seconds, _SECONDS_PER_MINUTE)
+
+	if days > 0:
+		return _TIME_DAYS_REMAINING_FORMAT.format(**locals())
+	else:
+		return _TIME_REMAINING_FORMAT.format(**locals())
+
+
+def _get_eta_from_seconds(seconds):
+	target_time = time.localtime(time.time() + seconds)
+	if seconds > _SECONDS_PER_DAY:
+		return time.strftime(_ETA_DAYS_STRFTIME, target_time)
+	else:
+		return time.strftime(_ETA_STRFTIME, target_time)
+
+
+ProgressData = collections.namedtuple("ProgressData", ("time", "time_string",
+                                                       "time_left", "time_left_string",
+                                                       "eta"))
+
 
 class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
-		       octoprint.plugin.ProgressPlugin,
+                       octoprint.plugin.ProgressPlugin,
                        octoprint.plugin.SettingsPlugin,
                        octoprint.plugin.StartupPlugin,
                        octoprint.plugin.TemplatePlugin,
@@ -32,79 +81,48 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		self._bullet = None
 		self._channel = None
 		self._sender = None
-		self._update_period_sec = 0
-		self._periodic_updates_disabled = True
-		self._next_message = 0
-		self._time_remaining_format = "{days:d}d {hours:02d}h {minutes:02d}min"
-		self._eta_strftime = "%H:%M %d-%m"
+
+		self._periodic_updates = False
+		self._periodic_updates_interval = 0
+		self._next_message = None
+
+		self._periodic_updates_lock = threading.RLock()
 
 	def _connect_bullet(self, apikey, channel_name=""):
 		self._bullet, self._sender = self._create_sender(apikey, channel_name)
 
 	#~~ progress message helpers
-	def _sanitize_current_data(self, currentData):
 
-		#Default messages if no data available
-		currentData["progress"]["printTimeLeftString"] = "No Time Remaining yet"
-		currentData["progress"]["printTimeString"] = "Not started yet"
-		currentData["progress"]["ETA"] = "No ETA yet"
-		if (currentData["progress"]["printTimeLeft"] != None):
-			currentData["progress"]["printTimeLeftString"] = self._get_time_from_seconds(currentData["progress"]["printTimeLeft"])
-			currentData["progress"]["ETA"] = time.strftime(self._eta_strftime, time.localtime(time.time() + currentData["progress"]["printTimeLeft"]))
-		if (currentData["progress"]["printTime"] != None):
-			currentData["progress"]["printTimeString"] = self._get_time_from_seconds(currentData["progress"]["printTime"])
-			
-		return currentData
+	@staticmethod
+	def _get_progress_data(current_data):
+		time_value = current_data["progress"]["printTime"]
+		time_left_value = current_data["progress"]["printTimeLeft"]
 
-	def _get_time_from_seconds(self, seconds):
-		days, seconds = divmod(seconds, 86400)
-		hours, seconds = divmod(seconds, 3600)
-		minutes, seconds = divmod(seconds, 60)
-		return self._time_remaining_format.format(**locals())
-	
+		time_string = "-"
+		time_left_string = "-"
+		eta = "-"
+
+		if time_value is not None:
+			time_string = _get_time_from_seconds(time_value)
+
+		if time_left_value is not None:
+			time_left_string = _get_time_from_seconds(time_left_value)
+			eta = _get_eta_from_seconds(time_left_value)
+
+		return ProgressData(time_value, time_string, time_left_value, time_left_string, eta)
+
 	#~~ PrintProgressPlugin
+
 	def on_print_progress(self, storage, path, progress):
-		if(self._periodic_updates_disabled):
-			return
+		self._send_periodic_update(progress)
 
-		# Called every 1% of progress
-		self._logger.debug("Progress: {} {} {}".format(storage,path,progress))
-		
-		# Check if enough time has passed since last message
-		if(time.time() < self._next_message):
-			return
-
-		currentData = self._printer.get_current_data()
-		currentData = self._sanitize_current_data(currentData)
-
-		self._logger.debug("Remaining {} ({})".format(currentData["progress"]["printTimeLeftString"],currentData["progress"]["printTimeLeftOrigin"]))
-		self._logger.debug("Total Print time {}".format(currentData["progress"]["printTimeString"]))
-		self._logger.debug("Estimated Completion  {}".format(currentData["progress"]["ETA"]))
-
-		#Now we have print time left, check if there is time for another message before job ends
-		if(currentData["progress"]["printTimeLeft"] < self._update_period_sec):
-			self._logger.debug("Skip trailing message since print is nearly done {} of {}".format(currentData["progress"]["printTimeLeft"], self._update_period_sec))
-			return
-
-		self._next_message = time.time() + self._update_period_sec
-
-		path = currentData["job"]["file"]["path"]
-		eta = currentData["progress"]["ETA"]
-		print_time = currentData["progress"]["printTimeString"]
-		remaining = currentData["progress"]["printTimeLeftString"]
-		title = self._settings.get(["printProgress", "title"]).format(**locals())
-		body = self._settings.get(["printProgress", "body"]).format(**locals())
-		filename = os.path.splitext(path)[0] + ".jpg"
-
-		self._send_message_with_webcam_image(title, body, filename=filename)
-			
-													    
-	
 	#~~ StartupPlugin
 
 	def on_after_startup(self):
 		self._connect_bullet(self._settings.get(["access_token"]),
 		                     self._settings.get(["push_channel"]))
+		self._periodic_updates = self._settings.get(["periodic_updates"])
+		self._periodic_updates_interval = self._settings.get_int(["periodic_updates_interval"]) * 60
 
 	#~~ SettingsPlugin
 
@@ -120,6 +138,19 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		return data
 
 	def on_settings_save(self, data):
+		if "periodic_updates_interval" in data:
+			try:
+				data["periodic_updates_interval"] = int(data["periodic_updates_interval"])
+			except:
+				self._logger.exception("Got an invalid value to save for periodic_updates_interval, ignoring it")
+				del data["periodic_updates_interval"]
+
+		if "access_token" in data and not data["access_token"]:
+			data["access_token"] = None
+
+		if "push_channel" in data and not data["push_channel"]:
+			data["push_channel"] = None
+
 		octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
 
 		import threading
@@ -127,27 +158,30 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		                                                             self._settings.get(["push_channel"])))
 		thread.daemon = True
 		thread.start()
-		# Periodic update settings
-		self._update_period_sec = self._settings.get_int(["update_interval"]) * 60
-		self._periodic_updates_disabled = self._settings.get(["periodic_updates_disabled"])
-		self._logger.debug("Config: {} {}".format(self._update_period_sec, self._periodic_updates_disabled))
-		# Changing settings mid-print resets the timer
-		self._next_message = time.time() + self._update_period_sec
+
+		with self._periodic_updates_lock:
+			# Periodic update settings
+			self._periodic_updates = self._settings.get(["periodic_updates"])
+			self._periodic_updates_interval = self._settings.get_int(["periodic_updates_interval"]) * 60
+
+			# Changing settings mid-print resets the timer
+			if self._next_message is not None:
+				self._next_message = time.time() + self._periodic_updates_interval
 
 
 	def get_settings_defaults(self):
 		return dict(
-			update_interval = 0,
-			progress_updates_enabled = False,
 			access_token=None,
 			push_channel=None,
+			periodic_updates = False,
+			periodic_updates_interval = 15,
 			printDone=dict(
 				title="Print job finished",
 				body="{file} finished printing in {elapsed_time}"
 			),
 			printProgress=dict(
 				title="Print job {progress}% complete",
-				body="{progress}% {path}\n{print_time}\n{remaining} left\n{eta} finish"
+				body="{progress}% on {path}\nTime elapsed: {print_time}\nTime left: {remaining}\nETA: {eta}"
 			)
 		)
 
@@ -202,15 +236,17 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 			title = self._settings.get(["printDone", "title"]).format(**locals())
 			body = self._settings.get(["printDone", "body"]).format(**locals())
-			filename = os.path.splitext(file)[0] + ".jpg"
+			filename = os.path.splitext(file)[0] + "-done.jpg"
 
 			self._send_message_with_webcam_image(title, body, filename=filename)
 
-		if event == Events.PRINT_STARTED:
-			self._update_period_sec = self._settings.get_int(["update_interval"]) * 60
-			self._periodic_updates_disabled = self._settings.get(["periodic_updates_disabled"])
-			self._next_message = time.time() + self._update_period_sec
-			self._logger.debug("Started: {} {}".format(self._update_period_sec, self._periodic_updates_disabled))
+			with self._periodic_updates_lock:
+				self._next_message = None
+
+		elif event == Events.PRINT_STARTED:
+			if self._periodic_updates:
+				with self._periodic_updates_lock:
+					self._next_message = time.time() + self._periodic_updates_interval
 
 
 	##~~ Softwareupdate hook
@@ -233,6 +269,51 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		)
 
 	##~~ Internal utility methods
+
+	def _send_periodic_update(self, progress):
+		if not self._periodic_updates:
+			return
+
+		with self._periodic_updates_lock:
+			# Check if we even are supposed to run
+			if self._next_message is None:
+				return
+
+			# Check if enough time has passed since last message
+			if time.time() < self._next_message:
+				return
+
+			self._next_message = time.time() + self._periodic_updates_interval
+
+			current_data = self._printer.get_current_data()
+			progress_data = self._get_progress_data(current_data)
+
+			if progress_data.time is None:
+				# doesn't really make sense to send a progress if we haven't properly started yet
+				return
+
+			if progress_data.time_left is None:
+				# also can't check if we need to send a report if time_left is None
+				return
+
+			# check if there is time for another message before job ends
+			if progress_data.time_left < self._periodic_updates_interval:
+				self._logger.debug("Skip trailing message since print "
+				                   "is nearly done: {} of {}".format(progress_data.time_left,
+				                                                     self._periodic_updates_interval))
+				return
+
+			path = current_data["job"]["file"]["path"]
+			print_time = progress_data.time_string
+			remaining = progress_data.time_left_string
+			eta = progress_data.eta
+
+			title = self._settings.get(["printProgress", "title"]).format(**locals())
+			body = self._settings.get(["printProgress", "body"]).format(**locals())
+			filename = _PERIODIC_FILENAME_FORMAT.format(name=os.path.splitext(path)[0],
+			                                            progress=progress)
+
+			self._send_message_with_webcam_image(title, body, filename=filename)
 
 	def _send_message_with_webcam_image(self, title, body, filename=None, sender=None):
 		if filename is None:
