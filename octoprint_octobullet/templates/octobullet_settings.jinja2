@@ -55,4 +55,4 @@
 
 </form>
 
-<button class="btn btn-primary btn-block" data-bind="click: sendTestMessage"><i class="icon-spinner icon-spin" data-bind="visible: busy"></i> {{ _('Send a test message') }}</button>
+<button class="btn btn-primary btn-block" data-bind="click: sendTestMessage, enable: !busy(), css: {disabled: busy()}"><i class="icon-spinner icon-spin" data-bind="visible: busy"></i> {{ _('Send a test message') }}</button>
