@@ -52,6 +52,14 @@
             </div>
         </div>
 
+        <div class="control-group">
+            <div class="controls">
+                <span class="help-block">{% trans %}
+                    Available placeholders: <code>{file}</code> - printed file, <code>{elapsed_time}</code> - duration of the print
+                {% endtrans %}</span>
+            </div>
+        </div>
+
     </fieldset>
 
     <fieldset>
@@ -98,6 +106,17 @@
                 <textarea rows="4" class="block" data-bind="value: settings.settings.plugins.octobullet.printProgress.body"></textarea>
             </div>
         </div>
+
+        <div class="control-group">
+            <div class="controls">
+                <span class="help-block">{% trans %}
+                    Available placeholders: <code>{file}</code> - printed file, <code>{elapsed_time}</code> - duration of the print so far,
+                    <code>{remaining_time}</code> - remainding duration of the print, <code>{eta}</code> - estimated time of completion,
+                    <code>{progress}</code> - print progress in percent
+                {% endtrans %}</span>
+            </div>
+        </div>
+
     </fieldset>
 
 </form>
