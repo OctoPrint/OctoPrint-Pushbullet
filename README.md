@@ -58,7 +58,13 @@ plugins:
       title: 'Print job {progress}% complete'
 
       # body of the notification
-      body: '{progress}% on {file}\nTime elapsed: {elapsed_time}\nTime left: {remaining_time}\nETA: {eta}'
+      body: '{progress}% on {file}
+
+        Time elapsed: {elapsed_time}
+
+        Time left: {remaining_time}
+
+        ETA: {eta}'
 ```
 
 ## Known Issues
