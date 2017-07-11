@@ -7,7 +7,7 @@ This is an OctoPrint Plugin that adds support for [Pushbullet notifications](htt
 At the current state OctoPrint will send a notification when a print job finishes. If a webcam is available, an image
 of the print result will be captured and included in the notification.
 
-![Configuration Dialog](http://i.imgur.com/mytVNX0.png)
+![Configuration Dialog](http://i.imgur.com/AXnVLNC.png)
 
 ![Example Push Notification](http://i.imgur.com/qgon1a3.png)
 
