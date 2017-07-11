@@ -7,9 +7,9 @@ This is an OctoPrint Plugin that adds support for [Pushbullet notifications](htt
 At the current state OctoPrint will send a notification when a print job finishes. If a webcam is available, an image
 of the print result will be captured and included in the notification.
 
-![Configuration Dialog](http://i.imgur.com/7WYe8E9.png)
+![Configuration Dialog](http://i.imgur.com/mytVNX0.png)
 
-![Example Push Notification](http://i.imgur.com/EyfOuVZ.png)
+![Example Push Notification](http://i.imgur.com/qgon1a3.png)
 
 ## Installation
 
@@ -24,7 +24,8 @@ The only thing that absolutely needs to be configured is the Access Token necess
 can find this in you Pushbullet Account Settings under "Access Token". Copy and paste the value there into the
 "Access Token" input field in the configuration dialog of the Pushbullet plugin.
 
-By manually editing `config.yaml` it is also possible to adjust the text of the message that will be sent in the notification.
+All other settings can also be edited via the included configuration dialog. If you want to edit `config.yaml` manually,
+this is the expected structure:
 
 ``` yaml
 plugins:
