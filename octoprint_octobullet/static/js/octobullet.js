@@ -27,9 +27,17 @@ $(function() {
                             type: "success"
                         });
                     } else {
+                        var text;
+                        if (response.error === "channel") {
+                            text = gettext("Test message could not be sent to Pushbullet due to the channel being unknown, check your settings");
+                        } else if (response.error === "apikey") {
+                            text = gettext("Test message could not be sent to Pushbullet due to an invalid Access Token, check your settings");
+                        } else {
+                            text = gettext("Test message could not be sent to Pushbullet, check log & your settings");
+                        }
                         new PNotify({
                             title: gettext("Test message could not be sent"),
-                            text: gettext("Test message could not be sent to Pushbullet, check settings"),
+                            text: text,
                             type: "error"
                         });
                     }

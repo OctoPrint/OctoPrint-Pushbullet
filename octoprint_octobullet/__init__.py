@@ -89,7 +89,14 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		self._periodic_updates_lock = threading.RLock()
 
 	def _connect_bullet(self, apikey, channel_name=""):
-		self._bullet, self._sender = self._create_sender(apikey, channel_name)
+		try:
+			self._bullet, self._sender = self._create_sender(apikey, channel=channel_name)
+		except NoSuchChannel:
+			self._logger.warn("Could not find channel {}, please check your configuration!".format(channel_name))
+			self._bullet, self._sender = self._create_sender(apikey)
+		except pushbullet.InvalidKeyError:
+			self._logger.error("Invalid Pushbullet API key, please check your configuration!")
+			self._bullet = self._sender = None
 
 	#~~ progress message helpers
 
@@ -217,7 +224,12 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		token = data["token"]
 		channel = data.get("channel", None)
 
-		_, sender = self._create_sender(token, channel)
+		try:
+			_, sender = self._create_sender(token, channel=channel)
+		except NoSuchChannel:
+			return flask.make_response(flask.jsonify(result=False, error="channel"))
+		except pushbullet.InvalidKeyError:
+			return flask.make_response(flask.jsonify(result=False, error="apikey"))
 
 		result = self._send_message_with_webcam_image("Test from the OctoPrint PushBullet Plugin", message, sender=sender)
 		return flask.make_response(flask.jsonify(result=result))
@@ -318,7 +330,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	def _send_message_with_webcam_image(self, title, body, filename=None, sender=None):
 		if filename is None:
 			import random, string
-			filename = "{}.jpg".format(random.choice(string.ascii_letters) * 16)
+			filename = "test-{}.jpg".format("".join([random.choice(string.ascii_letters) for _ in range(16)]))
 
 		if sender is None:
 			sender = self._sender
@@ -391,9 +403,14 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 						break
 				else:
 					self._logger.warn("Could not find channel {}, please check your configuration!".format(channel))
+					raise NoSuchChannel(channel)
 
 			self._logger.info("Connected to PushBullet")
 			return bullet, sender
+		except NoSuchChannel:
+			raise
+		except pushbullet.InvalidKeyError:
+			raise
 		except:
 			self._logger.exception("Error while instantiating PushBullet")
 			return None, None
@@ -428,6 +445,13 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			                  "got return code {}: {}, {}".format(p.returncode,
 			                                                      p.stdout.text,
 			                                                      p.stderr.text))
+
+
+class NoSuchChannel(Exception):
+	def __init__(self, channel, *args, **kwargs):
+		Exception.__init__(self, *args, **kwargs)
+		self.channel = channel
+
 
 __plugin_name__ = "Pushbullet"
 def __plugin_load__():
