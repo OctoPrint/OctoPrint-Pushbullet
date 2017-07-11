@@ -384,7 +384,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 			# Setup channel object if channel setting is present
 			if channel:
-				for channel_obj in self._bullet.channels:
+				for channel_obj in bullet.channels:
 					if channel_obj.channel_tag == channel:
 						sender = channel_obj
 						self._logger.info("Connected to PushBullet on channel {}".format(channel))
