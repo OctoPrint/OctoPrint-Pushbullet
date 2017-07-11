@@ -107,7 +107,7 @@
             </div>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" data-bind="visible: settings.settings.plugins.octobullet.periodic_updates">
             <div class="controls">
                 <span class="help-block">{% trans %}
                     Available placeholders: <code>{file}</code> - printed file, <code>{elapsed_time}</code> - duration of the print so far,
