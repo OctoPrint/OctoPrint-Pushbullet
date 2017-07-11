@@ -17,7 +17,7 @@ from flask.ext.login import current_user
 
 import pushbullet
 import flask
-
+import datetime
 import sarge
 import collections
 import threading
@@ -25,8 +25,8 @@ import threading
 
 _TIME_REMAINING_FORMAT = "{hours:d}h {minutes:d}min"
 _TIME_DAYS_REMAINING_FORMAT = "{days:d}d {hours:d}h {minutes:d}min"
-_ETA_STRFTIME = "%Y-%m-%d %H:%M"
-_ETA_DAYS_STRFTIME = "%H:%M"
+_ETA_STRFTIME = "%H:%M"
+_ETA_DAYS_STRFTIME = "%Y-%m-%d %H:%M"
 _PERIODIC_FILENAME_FORMAT = "{name}-{progress}.jpg"
 
 _SECONDS_PER_DAY = 86400
@@ -34,7 +34,7 @@ _SECONDS_PER_HOUR = 3600
 _SECONDS_PER_MINUTE = 60
 
 
-def _get_time_from_seconds(seconds):
+def _get_time_from_seconds(seconds, default=None):
 	"""
 	Tests:
 
@@ -46,6 +46,14 @@ def _get_time_from_seconds(seconds):
 		'23h 59min'
 	"""
 
+	if seconds is None:
+		return default
+
+	try:
+		seconds = int(seconds)
+	except ValueError:
+		return default
+
 	days, seconds = divmod(seconds, _SECONDS_PER_DAY)
 	hours, seconds = divmod(seconds, _SECONDS_PER_HOUR)
 	minutes, seconds = divmod(seconds, _SECONDS_PER_MINUTE)
@@ -56,17 +64,20 @@ def _get_time_from_seconds(seconds):
 		return _TIME_REMAINING_FORMAT.format(**locals())
 
 
-def _get_eta_from_seconds(seconds):
+def _get_eta_from_seconds(seconds, default=None):
+	if seconds is None:
+		return default
+
+	try:
+		seconds = int(seconds)
+	except ValueError:
+		return default
+
 	target_time = time.localtime(time.time() + seconds)
 	if seconds > _SECONDS_PER_DAY:
 		return time.strftime(_ETA_DAYS_STRFTIME, target_time)
 	else:
 		return time.strftime(_ETA_STRFTIME, target_time)
-
-
-ProgressData = collections.namedtuple("ProgressData", ("time", "time_string",
-                                                       "time_left", "time_left_string",
-                                                       "eta"))
 
 
 class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
@@ -104,19 +115,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	def _get_progress_data(current_data):
 		time_value = current_data["progress"]["printTime"]
 		time_left_value = current_data["progress"]["printTimeLeft"]
-
-		time_string = "-"
-		time_left_string = "-"
-		eta = "-"
-
-		if time_value is not None:
-			time_string = _get_time_from_seconds(time_value)
-
-		if time_left_value is not None:
-			time_left_string = _get_time_from_seconds(time_left_value)
-			eta = _get_eta_from_seconds(time_left_value)
-
-		return ProgressData(time_value, time_string, time_left_value, time_left_string, eta)
+		return time_value, time_left_value
 
 	#~~ PrintProgressPlugin
 
@@ -188,7 +187,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			),
 			printProgress=dict(
 				title="Print job {progress}% complete",
-				body="{progress}% on {path}\nTime elapsed: {print_time}\nTime left: {remaining}\nETA: {eta}"
+				body="{progress}% on {file}\nTime elapsed: {elapsed_time}\nTime left: {remaining_time}\nETA: {eta}"
 			)
 		)
 
@@ -239,16 +238,15 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	def on_event(self, event, payload):
 
 		if event == Events.PRINT_DONE:
-			file = os.path.basename(payload["file"])
+			path = os.path.basename(payload["file"])
 			elapsed_time_in_seconds = payload["time"]
 
-			import datetime
-			import octoprint.util
-			elapsed_time = octoprint.util.get_formatted_timedelta(datetime.timedelta(seconds=elapsed_time_in_seconds))
+			placeholders = dict(file=path,
+			                    elapsed_time=_get_time_from_seconds(elapsed_time_in_seconds, default="?"))
 
-			title = self._settings.get(["printDone", "title"]).format(**locals())
-			body = self._settings.get(["printDone", "body"]).format(**locals())
-			filename = os.path.splitext(file)[0] + "-done.jpg"
+			title = self._settings.get(["printDone", "title"]).format(**placeholders)
+			body = self._settings.get(["printDone", "body"]).format(**placeholders)
+			filename = os.path.splitext(path)[0] + "-done.jpg"
 
 			self._send_message_with_webcam_image(title, body, filename=filename)
 
@@ -298,30 +296,32 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			self._next_message = time.time() + self._periodic_updates_interval
 
 			current_data = self._printer.get_current_data()
-			progress_data = self._get_progress_data(current_data)
+			elapsed_time, remaining_time = self._get_progress_data(current_data)
 
-			if progress_data.time is None:
+			if elapsed_time is None:
 				# doesn't really make sense to send a progress if we haven't properly started yet
 				return
 
-			if progress_data.time_left is None:
+			if remaining_time is None:
 				# also can't check if we need to send a report if time_left is None
 				return
 
 			# check if there is time for another message before job ends
-			if progress_data.time_left < self._periodic_updates_interval:
+			if remaining_time < self._periodic_updates_interval:
 				self._logger.debug("Skip trailing message since print "
-				                   "is nearly done: {} of {}".format(progress_data.time_left,
+				                   "is nearly done: {} of {}".format(remaining_time,
 				                                                     self._periodic_updates_interval))
 				return
 
 			path = current_data["job"]["file"]["path"]
-			print_time = progress_data.time_string
-			remaining = progress_data.time_left_string
-			eta = progress_data.eta
+			placeholders = dict(progress=progress,
+			                    file=path,
+			                    elapsed_time=_get_time_from_seconds(elapsed_time, default="?"),
+			                    remaining_time=_get_time_from_seconds(remaining_time, default="?"),
+			                    eta=_get_eta_from_seconds(remaining_time, default="?"))
 
-			title = self._settings.get(["printProgress", "title"]).format(**locals())
-			body = self._settings.get(["printProgress", "body"]).format(**locals())
+			title = self._settings.get(["printProgress", "title"]).format(**placeholders)
+			body = self._settings.get(["printProgress", "body"]).format(**placeholders)
 			filename = _PERIODIC_FILENAME_FORMAT.format(name=os.path.splitext(path)[0],
 			                                            progress=progress)
 

@@ -31,17 +31,34 @@ plugins:
   octobullet:
     # Pushbullet Access Token for your account
     access_token: your_access_token
+
+    # Pushbullet Channel Tag to use for messages, may be left empty/null
+    push_channel: some_tag
     
     # message to send when a print is done
     # available placeholders:
     # - file: name of the file that was printed
-    # - elapsed_time: duration of the print in HH:mm:ss format
+    # - elapsed_time: duration of the print, format "[{days}d ]{hours}h {minutes}min"
     printDone:
       # title of the notification
       title: 'Print job finished'
       
       # body of the notification
       body: '{file} finished printing in {elapsed_time}'
+
+    # message to send for regular progress messages
+    # available placeholders:
+    # - progress: current progress in percent
+    # - file: name of the file that is being printed
+    # - elapsed_time: duration of the print so far, format "[{days}d ]{hours}h {minutes}min"
+    # - remaining_time: expected remaining duration of the print, format "[{days}d ]{hours}h {minutes}min"
+    # - eta: expected finish time of the print, format "[{year}-{month}-{day} ]{hour}:{minute}"
+    printProgress:
+      # title of the notification
+      title: 'Print job {progress}% complete'
+
+      # body of the notification
+      body: '{progress}% on {file}\nTime elapsed: {elapsed_time}\nTime left: {remaining_time}\nETA: {eta}'
 ```
 
 ## Known Issues
