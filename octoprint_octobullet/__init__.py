@@ -224,13 +224,13 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		channel = data.get("channel", None)
 
 		try:
-			_, sender = self._create_sender(token, channel=channel)
+			bullet, sender = self._create_sender(token, channel=channel)
 		except NoSuchChannel:
 			return flask.make_response(flask.jsonify(result=False, error="channel"))
 		except pushbullet.InvalidKeyError:
 			return flask.make_response(flask.jsonify(result=False, error="apikey"))
 
-		result = self._send_message_with_webcam_image("Test from the OctoPrint PushBullet Plugin", message, sender=sender)
+		result = self._send_message_with_webcam_image("Test from the OctoPrint PushBullet Plugin", message, bullet=bullet, sender=sender)
 		return flask.make_response(flask.jsonify(result=result))
 
 	#~~ EventHandlerPlugin
@@ -327,10 +327,16 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 			self._send_message_with_webcam_image(title, body, filename=filename)
 
-	def _send_message_with_webcam_image(self, title, body, filename=None, sender=None):
+	def _send_message_with_webcam_image(self, title, body, filename=None, bullet=None, sender=None):
 		if filename is None:
 			import random, string
 			filename = "test-{}.jpg".format("".join([random.choice(string.ascii_letters) for _ in range(16)]))
+
+		if bullet is None:
+			bullet = self._bullet
+
+		if not bullet:
+			return False
 
 		if sender is None:
 			sender = self._sender
@@ -355,7 +361,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 				# flip or rotate as needed
 				self._process_snapshot(snapshot_path)
 
-				if self._send_file(sender, snapshot_path, filename, body):
+				if self._send_file(bullet, sender, snapshot_path, filename, body):
 					return True
 				self._logger.warn("Could not send a file message with the webcam image, sending only a note")
 
@@ -369,11 +375,11 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			return False
 		return True
 
-	def _send_file(self, sender, path, filename, body):
+	def _send_file(self, bullet, sender, path, filename, body):
 		try:
 			with open(path, "rb") as pic:
 				try:
-					file_data = self._bullet.upload_file(pic, filename)
+					file_data = bullet.upload_file(pic, filename)
 				except Exception as e:
 					self._logger.exception("Error while uploading snapshot, sending only a note: {}".format(str(e)))
 					return False
