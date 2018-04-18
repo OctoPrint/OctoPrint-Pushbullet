@@ -185,6 +185,10 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 				title="Print job finished",
 				body="{file} finished printing in {elapsed_time}"
 			),
+			printFailed=dict(
+				title="Print job failed",
+				body="{file} failed printing after {elapsed_time}"
+			),
 			printProgress=dict(
 				title="Print job {progress}% complete",
 				body="{progress}% on {file}\nTime elapsed: {elapsed_time}\nTime left: {remaining_time}\nETA: {eta}"
@@ -258,6 +262,21 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 				with self._periodic_updates_lock:
 					self._next_message = time.time() + self._periodic_updates_interval
 
+		elif event == Events.PRINT_FAILED:
+			path = os.path.basename(payload["file"])
+			elapsed_time_in_seconds = payload["time"]
+
+			placeholders = dict(file=path,
+			                    elapsed_time=_get_time_from_seconds(elapsed_time_in_seconds, default="?"))
+
+			title = self._settings.get(["printFailed", "title"]).format(**placeholders)
+			body = self._settings.get(["printFailed", "body"]).format(**placeholders)
+			filename = os.path.splitext(path)[0] + "-failed.jpg"
+
+			self._send_message_with_webcam_image(title, body, filename=filename)
+
+			with self._periodic_updates_lock:
+				self._next_message = None
 
 	##~~ Softwareupdate hook
 
