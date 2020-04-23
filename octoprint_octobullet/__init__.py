@@ -238,7 +238,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	def on_event(self, event, payload):
 
 		if event == Events.PRINT_DONE:
-			path = os.path.basename(payload["file"])
+			path = os.path.basename(payload["name"])
 			elapsed_time_in_seconds = payload["time"]
 
 			placeholders = dict(file=path,

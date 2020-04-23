@@ -1,8 +1,3 @@
-**⚠ Up for adoption! ⚠**
-
-I have my hands way too full with OctoPrint's maintenance to give this plugin the attention it needs. Hence I'm looking for a new maintainer to adopt it. [Please get in touch here](https://github.com/OctoPrint/OctoPrint-Pushbullet/issues/24).
-
----
 
 **HEADS-UP: Needs OctoPrint 1.2.4 or later!**
 
