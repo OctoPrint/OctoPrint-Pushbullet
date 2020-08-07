@@ -13,7 +13,7 @@ import octoprint.plugin
 
 from octoprint.events import Events
 from octoprint.server import admin_permission
-from flask.ext.login import current_user
+from flask_login import current_user
 
 import pushbullet
 import flask
