@@ -1,9 +1,10 @@
 # coding=utf-8
 from __future__ import absolute_import
 
-__author__ = "Gina Häußge <gina@octoprint.org>"
+__author__ = "Gina Häußge <gina@octoprint.org>, Adopted by Scott Rini <scott@rini.net>"
 __license__ = 'GNU Affero General Public License http://www.gnu.org/licenses/agpl.html'
 __copyright__ = "Copyright (C) 2015 The OctoPrint Project - Released under terms of the AGPLv3 License"
+__plugin_pythoncompat__ = ">=2.7,<4"
 
 import os
 
