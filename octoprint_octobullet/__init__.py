@@ -342,21 +342,29 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		snapshot_url = self._settings.global_get(["webcam", "snapshot"])
 		if snapshot_url:
 			try:
-				import urllib
-				snapshot_path, headers = urllib.urlretrieve(snapshot_url)
+				from requests import get
+				import tempfile
+				tempFile = tempfile.NamedTemporaryFile(delete=False)
+				response = get(
+					snapshot_url,
+					verify=False
+                )
+				response.raise_for_status()
+				tempFile.write(response.content)
+				tempFile.close()
 			except Exception as e:
 				self._logger.exception(
 					"Exception while fetching snapshot from webcam, sending only a note: {message}".format(
 						message=str(e)))
 			else:
 				# ffmpeg can't guess file type it seems
-				os.rename(snapshot_path, snapshot_path + ".jpg")
-				snapshot_path += ".jpg"
+				os.rename(tempFile.name, tempFile.name + ".jpg")
+				tempFile.name += ".jpg"
 
 				# flip or rotate as needed
-				self._process_snapshot(snapshot_path)
+				self._process_snapshot(tempFile)
 
-				if self._send_file(sender, snapshot_path, filename, body):
+				if self._send_file(sender, tempFile.name, filename, title + " " + body):
 					return True
 				self._logger.warn("Could not send a file message with the webcam image, sending only a note")
 
